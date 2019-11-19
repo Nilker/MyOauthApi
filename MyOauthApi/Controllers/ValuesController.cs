@@ -3,15 +3,21 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Web;
 using System.Web.Http;
+using MyOauthApi.Filter;
 
 namespace MyOauthApi.Controllers
 {
     public class ValuesController : ApiController
     {
         // GET api/values
+        [ApiAuthorize]
+        [Authorize]
         public IEnumerable<string> Get()
         {
+            var claims = ((System.Security.Claims.ClaimsPrincipal)HttpContext.Current.User).Claims;
+
             return new string[] { "value1", "value2" };
         }
 
