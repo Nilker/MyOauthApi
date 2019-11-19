@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Linq;
+using System.Net;
 using System.Security.Claims;
 using System.Security.Principal;
 using System.Threading.Tasks;
@@ -27,7 +28,7 @@ namespace MyOauthApi
             ConfigAuth(app);
 
             HttpConfiguration config = new HttpConfiguration();
-            WebApiConfig.Register(config);
+            //WebApiConfig.Register(config);
             app.UseCors(CorsOptions.AllowAll);
             app.UseWebApi(config);
         }
@@ -48,41 +49,66 @@ namespace MyOauthApi
                 AuthenticationType = "Bearer",
                 AllowInsecureHttp = true,                           //允许客户端使用http协议请求
                 TokenEndpointPath = new PathString("/token"),       //请求地址
-                AccessTokenExpireTimeSpan = TimeSpan.FromDays(1),   //token过期时间
+                AccessTokenExpireTimeSpan = TimeSpan.FromMinutes(1),   //token过期时间
                 //提供认证策略  处理由授权服务器中间件引发事件应用程序提供的对象。 应用程序可能完全实现接口，或它可能会造成的实例OAuthAuthorizationServerProvider并分配此服务器支持的 OAuth 流所需的委托。
-                Provider = new OAuthAuthorizationServerProvider()   
+                Provider = new OAuthAuthorizationServerProvider()
                 {
                     OnGrantResourceOwnerCredentials = GrantResourceOwnerCredentials,    //客户端通过包括从资源所有者处收到的凭据从授权服务器的令牌终结点请求访问令牌。 当发出请求，客户端进行身份验证与授权服务器。身份验证模式，就是账号密码
                     OnGrantClientCredentials = GrantClientCredentials,                  //客户端向授权服务器进行身份验证，并从令牌终结点请求访问令牌。客户端模式
                     OnValidateClientRedirectUri = ValidateClientRedirectUri,            //用来验证其注册的重定向 URL 的客户端。防钓鱼
                     OnValidateClientAuthentication = ValidateClientAuthentication,      //检查的基本方案标头和窗体正文以获取客户端的凭据
+                  
                 },
-                 //生成一次性授权代码返回到客户端应用程序。 为 OAuth 服务器要保护的应用程序必须提供的一个实例AuthorizationCodeProvider由生成的令牌
+                //生成一次性授权代码返回到客户端应用程序。 为 OAuth 服务器要保护的应用程序必须提供的一个实例AuthorizationCodeProvider由生成的令牌
                 AuthorizationCodeProvider = new AuthenticationTokenProvider
                 {
                     OnCreate = CreateAuthenticationCode,
                     OnReceive = ReceiveAuthenticationCode,
                 },
+                //生成acces_token 
+                AccessTokenProvider = new AuthenticationTokenProvider()
+                {
+                    OnCreate = CreateAccessToken,
+                    OnReceive = ReceiveAccessToken,
+                },
                 // 生成可用于生成新的访问令牌时所需的刷新令牌。 如果未提供授权服务器不会返回的刷新令牌/Token终结点
-                RefreshTokenProvider = new AuthenticationTokenProvider  
+                RefreshTokenProvider = new AuthenticationTokenProvider
                 {
                     OnCreate = CreateRefreshToken,
-                    OnReceive = ReceiveRefreshToken,
+                    OnReceive = ReceiveRefreshToken
                 },
-                
+
             });
         }
 
-        private void ReceiveRefreshToken(AuthenticationTokenReceiveContext context)
+
+        private void ReceiveAccessToken(AuthenticationTokenReceiveContext context)
         {
             context.DeserializeTicket(context.Token);
         }
 
-        private void CreateRefreshToken(AuthenticationTokenCreateContext context)
+        private void CreateAccessToken(AuthenticationTokenCreateContext context)
         {
             context.SetToken(context.SerializeTicket());
         }
 
+
+        private void ReceiveRefreshToken(AuthenticationTokenReceiveContext context)
+        {
+            context.DeserializeTicket(context.Token);
+            if (context.Ticket==null)
+            {
+                context.Response.StatusCode = (int) HttpStatusCode.Unauthorized;
+            }
+        }
+
+        private void CreateRefreshToken(AuthenticationTokenCreateContext context)
+        {
+            context.Ticket.Properties.ExpiresUtc = new DateTimeOffset(DateTime.Now.Add(TimeSpan.FromDays(1)));
+            context.SetToken(context.SerializeTicket());
+        }
+
+        #region 生成Code（拿code换Token的code）
         private void ReceiveAuthenticationCode(AuthenticationTokenReceiveContext context)
         {
             string value;
@@ -91,12 +117,13 @@ namespace MyOauthApi
                 context.DeserializeTicket(value);
             }
         }
-        
+
         private void CreateAuthenticationCode(AuthenticationTokenCreateContext context)
         {
             context.SetToken(Guid.NewGuid().ToString("n") + Guid.NewGuid().ToString("n"));
             _authenticationCodes[context.Token] = context.SerializeTicket();
         }
+        #endregion
 
         private Task ValidateClientAuthentication(OAuthValidateClientAuthenticationContext context)
         {
@@ -142,7 +169,7 @@ namespace MyOauthApi
                     new Claim("CurrentUserRoleId", 10086.ToString()),
                     new Claim("dbkey", "333")
                 });
-            
+
 
             context.Validated(identity);
 

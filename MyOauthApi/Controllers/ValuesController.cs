@@ -9,11 +9,12 @@ using MyOauthApi.Filter;
 
 namespace MyOauthApi.Controllers
 {
+    [ApiAuthorize]
+    [Authorize]
     public class ValuesController : ApiController
     {
         // GET api/values
-        [ApiAuthorize]
-        [Authorize]
+      
         public IEnumerable<string> Get()
         {
             var claims = ((System.Security.Claims.ClaimsPrincipal)HttpContext.Current.User).Claims;
